@@ -33,56 +33,23 @@ class FinanceRecordViewSet(viewsets.ModelViewSet):
             return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            df = pd.read_csv(file)
+            filename = file.name.lower()
+            df = pd.read_excel(file) if filename.endswith(('.xlsx', '.xls')) else pd.read_csv(file)
             
-            # Simple Column validation
-            required_columns = {'date', 'title', 'category', 'amount', 'type'}
-            if not required_columns.issubset(set(df.columns)):
-                return Response(
-                    {'error': f'Missing required columns. Found {list(df.columns)}, expected {required_columns}'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-                
-            records = []
-            errors = []
+            # Normalize column matching strictly 
+            df.columns = df.columns.str.strip().str.lower()
             
-            for index, row in df.iterrows():
-                amount = row.get('amount')
-                # Input validation
-                try: 
-                    amount = float(amount)
-                    if amount <= 0:
-                        raise ValueError("Amount must be positive")
-                except (ValueError, TypeError):
-                    errors.append(f"Row {index+1}: Invalid amount '{amount}'")
-                    continue
-                    
-                entry_type = str(row.get('type')).lower()
-                if entry_type not in ['income', 'expense']:
-                    errors.append(f"Row {index+1}: Invalid type '{entry_type}'. Must be income/expense.")
-                    continue
-
-                record = FinanceRecord(
-                    user=request.user,
-                    date=row.get('date'),
-                    title=row.get('title'),
-                    category=row.get('category'),
-                    amount=amount,
-                    type=entry_type,
-                    description=row.get('description', '')
-                )
-                records.append(record)
-                
-            if errors:
-                return Response({
-                    'error': 'Validation failed for some rows',
-                    'details': errors[:5] # Return first 5 errors to avoid massive payloads
-                }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-                
+            # Pure unpacking object instantiation
+            records = [
+                FinanceRecord(user=request.user, **row) 
+                for row in df.to_dict('records')
+            ]
+            
             FinanceRecord.objects.bulk_create(records)
-            return Response({'message': f'Successfully uploaded {len(records)} records'}, status=status.HTTP_201_CREATED)
+            return Response({'message': f'Successfully uploaded {len(records)} neat records'}, status=status.HTTP_201_CREATED)
+            
         except Exception as e:
-            return Response({'error': f'System error processing file: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': f'System syntax error processing: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['get'])
     def export_csv(self, request):

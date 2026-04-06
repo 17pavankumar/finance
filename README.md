@@ -17,11 +17,12 @@ The backend relies on the **Single Responsibility Principle**. Instead of throwi
    
 2. **`finance` (Data Management)**
    - Manages the core `FinanceRecord` model (amount, category, type, description, date).
-   - Features a robust bulk CSV upload processor using `pandas` to gracefully catch and reject bad integers or incorrect string formats without halting the execution block.
+   - Features an ultra-simplified and clean bulk CSV/Excel (`.xlsx`) upload processor. By skipping noisy legacy looping, it uses `.to_dict('records')` unpacking (`**row`) to intelligently and cleanly migrate Pandas dataframes perfectly to the SQLite DB simultaneously.
    
 3. **`dashboard` (Analytics)**
-   - A pure aggregate API layer. 
-   - Exposes robust JSON payloads summarizing "Total Expense", "Income", and "Net Balance" dynamically by leveraging ultra-fast SQL `.aggregate(Sum('amount'))` rather than expensive Python loops.
+   - A pure aggregate API layer processing multi-metric payloads. 
+   - Dynamically analyzes "Total Expenses", "Income", "Net Balance", and **"Today's Expenses"** in real-time leveraging Django's SQL `aggregate(Sum())`.
+   - Also maps 12 full trailing fiscal months for seamless frontend layout plotting.
 
 ---
 
@@ -39,7 +40,7 @@ Access control operates completely at the middleware/decorator level. We impleme
 
 ### 1. Prerequisites
 - Python 3.10+
-- Pandas (for CSV processing)
+- Pandas & Openpyxl (For advanced data operations)
 
 ### 2. Setup
 Navigate into the backend folder, create a virtual environment, and install dependencies:
@@ -54,7 +55,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-*(Note: If you do not have a requirements.txt, ensure `django`, `djangorestframework`, `djangorestframework-simplejwt`, `django-cors-headers`, `pandas`, and `django-filter` are installed).*
+*(Note: If you do not have a requirements.txt, ensure `django`, `djangorestframework`, `djangorestframework-simplejwt`, `django-cors-headers`, `pandas`, `openpyxl`, and `django-filter` are installed).*
 
 ### 3. Database Migration
 This project relies on SQLite3 out of the box for assignment simplicity and portability. Setup the schema:
@@ -79,17 +80,10 @@ python manage.py runserver
 
 ### Finance Data
 - `GET /api/finance/records/` - Retrieve all transactions (Filters: `?type=income&category=Salary`)
-- `POST /api/finance/records/upload_csv/` - `multipart/form-data` upload endpoint. Expects headers: `date, title, category, amount, type`
-- `GET /api/finance/records/export_csv/` - Streams filtered dataset back as downloadable blob
+- `POST /api/finance/records/` - **New:** Standard endpoint for parsing singular manual data transactions quickly.
+- `POST /api/finance/records/upload_csv/` - `multipart/form-data` bulk upload endpoint (via Unpacking loops). Expects headers: `date, title, category, amount, type`.
+- `GET /api/finance/records/export_csv/` - Streams filtered dataset back as downloadable blob.
 
 ### Dashboard
-- `GET /api/dashboard/metrics/summary/` - Returns high-level sum items (Total Income, Total Expenses, Categories)
-- `GET /api/dashboard/metrics/metrics/` - Aggregated month-over-month trend pipeline for UI graphing
-
----
-
-## ⚖️ Tradeoffs & Assumptions
-
-1. **SQLite over PostgreSQL:** SQLite is used instead of Postgres for evaluation convenience. No complicated docker containers or DB URI strings are required to spin the project up locally for grading.
-2. **Pandas for CSV:** We opted to load the `pandas` library for CSV parsing. While native Python `csv` could work, pandas provides far more robust edge-case handling for financial data types and missing columns.
-3. **Hard-coded Chart Months:** In `dashboard/views.py`, because SQLite does not natively support `TruncMonth` datetime groupings like standard enterprise Postgres does, we use a fixed iteration month mapper to prevent database dialect crashes during local grading.
+- `GET /api/dashboard/metrics/summary/` - Returns high-level sum items (Total Income, Total Expenses, **Today's Expenses**, Categories).
+- `GET /api/dashboard/metrics/metrics/` - Aggregated full 12-month trend pipeline specifically targeting Recharts mapping.
